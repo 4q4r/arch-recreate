@@ -47593,14 +47593,6 @@ EOF
   cp "$PACK_DIR/system/sysctl/99-sysctl-monolith.conf" /etc/sysctl.d/
   cp "$PACK_DIR/system/zram-generator.conf" /etc/systemd/zram-generator.conf
 
-  echo "Periodic maintenance: fstrim / paccache / reflector / duperemove timers"
-  cp "$PACK_DIR/system/systemd-system/duperemove-root.service" \
-     "$PACK_DIR/system/systemd-system/duperemove-root.timer" /etc/systemd/system/
-  systemctl enable fstrim.timer paccache.timer reflector.timer duperemove-root.timer
-
-  echo "Power / bluetooth"
-  systemctl enable tlp.service bluetooth.service
-
   echo "Package set (system + desktop stack; source-system selection, apps excluded)"
   pacman -S --needed --noconfirm \
     zram-generator duperemove pacman-contrib \
@@ -47634,8 +47626,15 @@ EOF
     ttf-ubuntu-nerd ttf-victor-mono-nerd ttf-zed-mono-nerd
   # pavucontrol gvfs man-db man-pages   <- optional, see header comment
 
-  echo "sshd"
-  systemctl enable sshd.service
+  # services and timers AFTER packages: units like paccache.timer (pacman-contrib)
+  # or tlp.service must exist before "systemctl enable" can point at them
+  echo "Periodic maintenance: fstrim / paccache / reflector / duperemove / btrfs scrub"
+  cp "$PACK_DIR/system/systemd-system/duperemove-root.service" \
+     "$PACK_DIR/system/systemd-system/duperemove-root.timer" /etc/systemd/system/
+  systemctl enable fstrim.timer paccache.timer reflector.timer duperemove-root.timer btrfs-scrub@-.timer
+
+  echo "Power / bluetooth / ssh"
+  systemctl enable tlp.service bluetooth.service sshd.service
 
   echo "User account: $USER_NAME (groups as on the source system, minus docker)"
   # idempotent: stage 2 may be re-run after a partial pass
