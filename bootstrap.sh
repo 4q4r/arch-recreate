@@ -47636,10 +47636,17 @@ EOF
   echo "Power / bluetooth / ssh"
   systemctl enable tlp.service bluetooth.service sshd.service
 
-  echo "User account: $USER_NAME (groups as on the source system, minus docker)"
-  # idempotent: stage 2 may be re-run after a partial pass
-  id "$USER_NAME" >/dev/null 2>&1 || \
-    useradd -m -G wheel,audio,video,storage,input,wireshark,adbusers -s /bin/bash "$USER_NAME"
+  echo "User account: $USER_NAME (base groups + optional ones only if the group exists)"
+  # idempotent: stage 2 may be re-run after a partial pass. wireshark/adbusers/
+  # docker groups are created by the owner's (excluded) packages — add them only
+  # when they actually exist on the target
+  id "$USER_NAME" >/dev/null 2>&1 || {
+    extra=""
+    for g in wireshark adbusers docker; do
+      getent group "$g" >/dev/null 2>&1 && extra="$extra,$g"
+    done
+    useradd -m -G "wheel,audio,video,storage,input$extra" -s /bin/bash "$USER_NAME"
+  }
   sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
   passwd "$USER_NAME"
   passwd root
