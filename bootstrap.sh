@@ -15672,6 +15672,112 @@ __AR_EOF__
   # ---- empty directories (pywal scaffold) ----
   mkdir -p "$root/dotfiles/wal/colorschemes/dark"
   mkdir -p "$root/dotfiles/wal/colorschemes/light"
+  # ---- user scripts: wallpaper picker + direct change helper ----
+  emit "$root/dotfiles/local-bin/wall-select" <<'__AR_EOF__'
+#!/bin/bash
+
+# === НАСТРОЙКИ ===
+WALL_DIR="$HOME/Изображения/Wallpapers"
+
+# Проверка папки
+if [ ! -d "$WALL_DIR" ]; then
+    echo "Папка $WALL_DIR не найдена!"
+    exit 1
+fi
+
+cd "$WALL_DIR"
+
+# Включаем nullglob, чтобы не было ошибок, если нет файлов
+shopt -s nullglob
+
+# 1. Собираем все файлы в массив Bash
+files=( *.{jpg,jpeg,png,webp,gif,bmp,tiff,tga} )
+
+if [ ${#files[@]} -eq 0 ]; then
+    notify-send "Ошибка" "Обои не найдены в $WALL_DIR"
+    exit 1
+fi
+
+# === ГЕНЕРАЦИЯ МЕНЮ ===
+menu() {
+    # Перебираем массив
+    for img in "${files[@]}"; do
+        # Убираем расширение только для отображения
+        name_no_ext="${img%.*}"
+        
+        # Передаем: ИмяБезРасширения \0 иконка \x1f Путь
+        echo -en "$name_no_ext\0icon\x1f$WALL_DIR/$img\n"
+    done | rofi -dmenu -i -show-icons -p "Обои" \
+        -format 'i' \
+        -theme-str '
+            window { width: 800px; }
+            listview { columns: 1; lines: 6; fixed-height: false; }
+            element { 
+                orientation: horizontal; 
+                children: [ element-icon, element-text ]; 
+                spacing: 15px; 
+                padding: 10px; 
+            }
+            element-icon { size: 100px; }
+            element-text { vertical-align: 0.5; }
+        '
+}
+
+# === ЗАПУСК ===
+# Rofi вернет ИНДЕКС (число: 0, 1, 2...), благодаря -format 'i'
+SELECTED_INDEX=$(menu)
+
+# Проверяем, что выбор был сделан (строка не пустая)
+if [ -n "$SELECTED_INDEX" ]; then
+    # Достаем имя файла из массива по индексу
+    CHOICE="${files[$SELECTED_INDEX]}"
+    FULL_PATH="$WALL_DIR/$CHOICE"
+
+    # Проверка на всякий случай
+    if [ ! -f "$FULL_PATH" ]; then
+        notify-send "Ошибка" "Файл не найден: $FULL_PATH"
+        exit 1
+    fi
+
+    # 1. Генерируем цвета (wal)
+    wal -i "$FULL_PATH" -n > /dev/null 2>&1
+
+    sleep 0.1
+
+    # 2. Меняем обои
+    awww img "$FULL_PATH" --transition-type grow --transition-pos 0.5,0.5 --transition-step 180
+
+    # 3. Перезагружаем Sway (чтобы обновились рамки и бар)
+    swaymsg reload
+
+    notify-send "Обои обновлены" "${CHOICE%.*}"
+fi
+
+__AR_EOF__
+  truncate -s -1 "$root/dotfiles/local-bin/wall-select"   # no trailing newline in source
+  emit "$root/dotfiles/local-bin/wall-change" <<'__AR_EOF__'
+#!/bin/bash
+
+# 1. Проверяем, передан ли путь к картинке
+if [ -z "$1" ]; then
+    echo "Usage: wall-change <path/to/image>"
+    exit 1
+fi
+
+# 2. Устанавливаем обои через awww с анимацией
+awww img "$1" --transition-type grow --transition-pos 0.5,0.5 --transition-fps 60 --transition-step 90 --transition-duration 2
+
+# 3. Генерируем цвета через Pywal (ключ -n пропускает установку обоев самим wal, так как это делает awww)
+wal -i "$1" -n
+
+# 4. Перезагружаем Sway, чтобы он подхватил цвета из ~/.cache/wal/colors-sway
+swaymsg reload
+
+# 5. Отправляем уведомление (опционально)
+notify-send "Theme Updated" "Colors generated from $(basename "$1")"
+
+__AR_EOF__
+  truncate -s -1 "$root/dotfiles/local-bin/wall-change"   # no trailing newline in source
   # ---- binary payloads ----
   # ferrite — owner-built status bar binary (base64 payload)
   mkdir -p "$root/dotfiles/sway"
@@ -47340,6 +47446,7 @@ __AR_B64__
   # ---- exec bits, as on the source machine (find: skip dangling symlinks) ----
   find "$root/dotfiles/rofi/bin" "$root/dotfiles/rofi/scripts" \
        "$root/dotfiles/eww/scripts" "$root/dotfiles/swaync/scripts" \
+       "$root/dotfiles/local-bin" \
        -maxdepth 1 -type f -exec chmod +x {} +
   chmod +x "$root/dotfiles/sway/ferrite" "$root/dotfiles/sway/status.sh"
   show_readme > "$root/README.md"
@@ -47403,7 +47510,8 @@ system/           системные конфиги verbatim с исходной
 dotfiles/         bash-файлы + ~/.config-набор + ~/.cache/wal (тема сразу живая)
   sway (config, ferrite-статус-бар + его конфиг, status.sh), waybar, alacritty,
   eww, rofi, swaync, gtk-3/4, fontconfig, environment.d, xdg-desktop-portal,
-  git/ignore, wal (templates+colorschemes), nwg-look, starship.toml
+  git/ignore, wal (templates+colorschemes), nwg-look, starship.toml,
+  local-bin/ (wall-select — пикер обоев на $mod+w, wall-change)
 ```
 
 Диск (как у тебя): GPT → EFI 1G на `/boot` | swap | **btrfs top-level
@@ -47713,10 +47821,12 @@ stage4() {
   done
   cp -v "$PACK_DIR/dotfiles/starship.toml" "$HOME/.config/starship.toml"
   cp -a "$PACK_DIR/dotfiles/cache-wal" "$HOME/.cache/wal"   # theme works before the first wal run
+  mkdir -p "$HOME/.local/bin"
+  cp -a "$PACK_DIR/dotfiles/local-bin/." "$HOME/.local/bin/"
 
   find "$HOME/.config/rofi/bin" "$HOME/.config/rofi/scripts" \
        "$HOME/.config/eww/scripts" "$HOME/.config/swaync/scripts" \
-       -maxdepth 1 -type f -exec chmod +x {} +
+       "$HOME/.local/bin" -maxdepth 1 -type f -exec chmod +x {} +
   chmod +x "$HOME/.config/sway/ferrite" "$HOME/.config/sway/status.sh"
 
   echo "Stage 4 done."
