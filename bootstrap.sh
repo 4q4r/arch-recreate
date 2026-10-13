@@ -47581,6 +47581,9 @@ EOF
      "$PACK_DIR/system/network/20-wifi.network" /etc/systemd/network/
   cp "$PACK_DIR/system/iwd/main.conf" /etc/iwd/main.conf
   cp "$PACK_DIR/system/resolved.conf" /etc/systemd/resolved.conf
+  # arch-chroot bind-mounts the host /etc/resolv.conf into the chroot — detach
+  # that bind first, otherwise rm fails with EBUSY
+  umount /etc/resolv.conf 2>/dev/null || true
   rm -f /etc/resolv.conf
   ln -s /run/systemd/resolve/resolv.conf /etc/resolv.conf   # uplink variant, as on the source system
   systemctl enable systemd-networkd.service systemd-resolved.service \
@@ -47635,7 +47638,9 @@ EOF
   systemctl enable sshd.service
 
   echo "User account: $USER_NAME (groups as on the source system, minus docker)"
-  useradd -m -G wheel,audio,video,storage,input,wireshark,adbusers -s /bin/bash "$USER_NAME"
+  # idempotent: stage 2 may be re-run after a partial pass
+  id "$USER_NAME" >/dev/null 2>&1 || \
+    useradd -m -G wheel,audio,video,storage,input,wireshark,adbusers -s /bin/bash "$USER_NAME"
   sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
   passwd "$USER_NAME"
   passwd root
