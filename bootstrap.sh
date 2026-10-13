@@ -47482,7 +47482,9 @@ username / hostname / timezone / диск / размер свопа. Интер�
 arch-chroot /mnt /root/bootstrap.sh 2     # конфигурация + пакеты + юзер
 # ребут, логин на tty1 под юзером
 ./bootstrap.sh 3                          # yay + python-pywal (AUR) + user-юниты
-./bootstrap.sh 4                          # дотсы (спросит подтверждение на перезапись)
+./bootstrap.sh 4                          # дотсы (спросит подтверждение на перезапись;
+                                          # ЗАПУСКАТЬ НЕ ИЗ SWAY — работающий ferrite держит
+                                          # бинарник, cp упадёт с «Текстовый файл занят»)
 # прочее: ./bootstrap.sh extract | readme
 ```
 
