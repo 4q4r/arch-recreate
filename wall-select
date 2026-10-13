@@ -1,0 +1,78 @@
+#!/bin/bash
+
+# === НАСТРОЙКИ ===
+WALL_DIR="$HOME/Изображения/Wallpapers"
+
+# Проверка папки
+if [ ! -d "$WALL_DIR" ]; then
+    echo "Папка $WALL_DIR не найдена!"
+    exit 1
+fi
+
+cd "$WALL_DIR"
+
+# Включаем nullglob, чтобы не было ошибок, если нет файлов
+shopt -s nullglob
+
+# 1. Собираем все файлы в массив Bash
+files=( *.{jpg,jpeg,png,webp,gif,bmp,tiff,tga} )
+
+if [ ${#files[@]} -eq 0 ]; then
+    notify-send "Ошибка" "Обои не найдены в $WALL_DIR"
+    exit 1
+fi
+
+# === ГЕНЕРАЦИЯ МЕНЮ ===
+menu() {
+    # Перебираем массив
+    for img in "${files[@]}"; do
+        # Убираем расширение только для отображения
+        name_no_ext="${img%.*}"
+        
+        # Передаем: ИмяБезРасширения \0 иконка \x1f Путь
+        echo -en "$name_no_ext\0icon\x1f$WALL_DIR/$img\n"
+    done | rofi -dmenu -i -show-icons -p "Обои" \
+        -format 'i' \
+        -theme-str '
+            window { width: 800px; }
+            listview { columns: 1; lines: 6; fixed-height: false; }
+            element { 
+                orientation: horizontal; 
+                children: [ element-icon, element-text ]; 
+                spacing: 15px; 
+                padding: 10px; 
+            }
+            element-icon { size: 100px; }
+            element-text { vertical-align: 0.5; }
+        '
+}
+
+# === ЗАПУСК ===
+# Rofi вернет ИНДЕКС (число: 0, 1, 2...), благодаря -format 'i'
+SELECTED_INDEX=$(menu)
+
+# Проверяем, что выбор был сделан (строка не пустая)
+if [ -n "$SELECTED_INDEX" ]; then
+    # Достаем имя файла из массива по индексу
+    CHOICE="${files[$SELECTED_INDEX]}"
+    FULL_PATH="$WALL_DIR/$CHOICE"
+
+    # Проверка на всякий случай
+    if [ ! -f "$FULL_PATH" ]; then
+        notify-send "Ошибка" "Файл не найден: $FULL_PATH"
+        exit 1
+    fi
+
+    # 1. Генерируем цвета (wal)
+    wal -i "$FULL_PATH" -n > /dev/null 2>&1
+
+    sleep 0.1
+
+    # 2. Меняем обои
+    awww img "$FULL_PATH" --transition-type grow --transition-pos 0.5,0.5 --transition-step 180
+
+    # 3. Перезагружаем Sway (чтобы обновились рамки и бар)
+    swaymsg reload
+
+    notify-send "Обои обновлены" "${CHOICE%.*}"
+fi
