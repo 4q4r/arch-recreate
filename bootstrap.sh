@@ -29,11 +29,15 @@ SELF_URL="https://raw.githubusercontent.com/4q4r/arch-recreate/main/bootstrap.sh
 
 # Piped invocation (curl URL | bash): fetch the script to a real file and
 # re-exec, so stages, self-extraction and re-runs work from a stable path.
+# The remainder of the piped stdin is drained in the background, otherwise
+# the outer curl would block on a full pipe buffer (the script is ~3 MB).
 if [[ ! -f "${BASH_SOURCE[0]:-}" ]]; then
   echo "piped invocation detected: fetching $SELF_URL to a real file..."
   SELF_TMP="$(mktemp /tmp/arch-bootstrap.XXXXXX.sh)"
   curl -fsSL "$SELF_URL" -o "$SELF_TMP" || { echo "fetch failed, abort" >&2; exit 1; }
-  exec bash "$SELF_TMP" "$@"
+  cat >/dev/null &
+  bash "$SELF_TMP" "$@"
+  exit "$?"
 fi
 
 set -euo pipefail
