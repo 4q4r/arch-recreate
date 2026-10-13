@@ -35,9 +35,14 @@ if [[ ! -f "${BASH_SOURCE[0]:-}" ]]; then
   echo "piped invocation detected: fetching $SELF_URL to a real file..."
   SELF_TMP="$(mktemp /tmp/arch-bootstrap.XXXXXX.sh)"
   curl -fsSL "$SELF_URL" -o "$SELF_TMP" || { echo "fetch failed, abort" >&2; exit 1; }
+  # stages never read stdin (all input comes from /dev/tty); keep draining the
+  # pipe so the outer curl never stalls, and drain the tail before exiting so
+  # it never dies with a write error
   cat >/dev/null &
-  bash "$SELF_TMP" "$@"
-  exit "$?"
+  bash "$SELF_TMP" "$@"; RC=$?
+  cat >/dev/null
+  wait
+  exit "$RC"
 fi
 
 set -euo pipefail
