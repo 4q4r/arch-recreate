@@ -47714,9 +47714,10 @@ stage4() {
   cp -v "$PACK_DIR/dotfiles/starship.toml" "$HOME/.config/starship.toml"
   cp -a "$PACK_DIR/dotfiles/cache-wal" "$HOME/.cache/wal"   # theme works before the first wal run
 
-  chmod +x "$HOME/.config/sway/ferrite" "$HOME/.config/sway/status.sh" \
-           "$HOME/.config/rofi/bin/"* "$HOME/.config/rofi/scripts/"* \
-           "$HOME/.config/eww/scripts/"* "$HOME/.config/swaync/scripts/"*
+  find "$HOME/.config/rofi/bin" "$HOME/.config/rofi/scripts" \
+       "$HOME/.config/eww/scripts" "$HOME/.config/swaync/scripts" \
+       -maxdepth 1 -type f -exec chmod +x {} +
+  chmod +x "$HOME/.config/sway/ferrite" "$HOME/.config/sway/status.sh"
 
   echo "Stage 4 done."
   echo "  - wallpapers: copy yours into ~/Изображения/Wallpapers (not included in the pack)"
